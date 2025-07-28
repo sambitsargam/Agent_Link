@@ -44,15 +44,16 @@ app.post('/webhook', (req, res) => {
           return handleIntent(intent, text);
         })
         .then(response => {
-          return sendMessage(from, response);
+          return sendMessageToWhatsApp(from, response);
         })
         .catch(error => {
           console.error('Error processing message:', error);
-          return sendMessage(from, "Sorry, something went wrong. Please try again.");
+          return sendMessageToWhatsApp(from, "😔 Sorry, something went wrong. Please try again.");
         });
     }
   }
   
+  // Return 200 OK immediately to Twilio (this doesn't send a message to user)
   res.status(200).send('OK');
 });
 
