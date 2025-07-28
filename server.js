@@ -27,30 +27,40 @@ app.get("/health", (req, res) => {
 
 // WhatsApp webhook endpoint
 app.post('/webhook', (req, res) => {
-  console.log('Webhook received:', JSON.stringify(req.body, null, 2));
+  let from, text;
   
-  const message = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-  
-  if (message) {
-    const from = message.from;
-    const text = message.text?.body;
+  // Handle real Twilio WhatsApp webhook format
+  if (req.body.From && req.body.Body) {
+    from = req.body.From; // Already in format "whatsapp:+66955928521"
+    text = req.body.Body;
     
-    if (text) {
-      console.log(`Message from ${from}: ${text}`);
-      
-      // Parse intent with userId and respond
-      parseIntent(text, from)
-        .then(intent => {
-          return handleIntent(intent, text);
-        })
-        .then(response => {
-          return sendMessageToWhatsApp(from, response);
-        })
-        .catch(error => {
-          console.error('Error processing message:', error);
-          return sendMessageToWhatsApp(from, "😔 Sorry, something went wrong. Please try again.");
-        });
+    // Fix malformed phone numbers from test requests
+    if (from.includes("whatsapp: ")) {
+      from = from.replace("whatsapp: ", "whatsapp:+");
     }
+  }
+  // Handle test format (Meta/WhatsApp Business API format)
+  else if (req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
+    const message = req.body.entry[0].changes[0].value.messages[0];
+    from = `whatsapp:+${message.from}`; // Convert to Twilio format
+    text = message.text?.body;
+  }
+  
+  if (from && text) {
+    console.log(`📱 Message from ${from}: ${text}`);
+    
+    // Parse intent with userId and respond
+    parseIntent(text, from)
+      .then(intent => {
+        return handleIntent(intent, text);
+      })
+      .then(response => {
+        return sendMessageToWhatsApp(from, response);
+      })
+      .catch(error => {
+        console.error('❌ Error processing message:', error.message);
+        return sendMessageToWhatsApp(from, "😔 Sorry, something went wrong. Please try again.");
+      });
   }
   
   // Return 200 OK immediately to Twilio (this doesn't send a message to user)
@@ -60,6 +70,6 @@ app.post('/webhook', (req, res) => {
 // Start the server
 app.listen(PORT, () => {
   console.log(`🚀 AgentLink backend running on port ${PORT}`);
-  console.log(`🌐 Webhook URL: http://localhost:${PORT}/whatsapp`);
+  console.log(`🌐 Webhook URL: http://localhost:${PORT}/webhook`);
   console.log(`💡 Make sure to configure your Twilio webhook URL to point to this endpoint`);
 });

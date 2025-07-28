@@ -14,7 +14,7 @@ const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
 async function sendMessageToWhatsApp(to, body) {
   try {
     if (!client) {
-      console.log("📝 Message would be sent to", to, ":", body);
+      console.log("📝 Twilio not configured - Message would be sent to", to.replace(/whatsapp:\+/, "+"));
       return;
     }
 
@@ -23,9 +23,9 @@ async function sendMessageToWhatsApp(to, body) {
       to,
       body,
     });
-    console.log("✅ Message sent successfully to", to);
+    console.log("✅ Message sent to", to.replace(/whatsapp:\+/, "+"));
   } catch (error) {
-    console.error("❌ Error sending message:", error);
+    console.error("❌ Error sending message:", error.message);
   }
 }
 

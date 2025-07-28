@@ -1,5 +1,5 @@
 const { Account } = require("@massalabs/massa-web3");
-const { getBalance } = require("./massa");
+const { getBalance, isValidMassaAddress } = require("./massa");
 const sessionManager = require("./session");
 const { 
   parseWithOpenAI, 
@@ -8,12 +8,26 @@ const {
   generatePersonalizedHelp,
   generatePortfolioAdvice,
   generateMarketInfo,
-  isOpenAIConfigured 
+  isOpenAIConfigured
 } = require("./openai");
 
-// Simple fallback parsing for when OpenAI is not available
+// Helper function to format addresses for WhatsApp
+function formatAddress(address) {
+  return `\`${address}\``;
+}
+
+// Helper function to format wallet info for WhatsApp
+function formatWalletInfo(nickname, address, timeAgo) {
+  const shortAddress = `${address.substring(0, 8)}...${address.substring(-8)}`;
+  return `*${nickname}*\n   📍 ${formatAddress(shortAddress)}\n   🕒 Created ${timeAgo}m ago`;
+}// Simple fallback parsing for when OpenAI is not available
 async function parseIntentSimple(msg) {
-  const text = msg.toLowerCase();
+  const text = msg.toLowerCase().trim();
+
+  // Check if the message is just a Massa address
+  if (isValidMassaAddress(msg.trim())) {
+    return { intent: "check_balance", address: msg.trim() };
+  }
 
   if (text.includes("create wallet") || text.includes("new wallet") || text.includes("generate wallet")) {
     return { intent: "create_wallet" };
@@ -43,7 +57,6 @@ async function parseIntent(msg, userId) {
   sessionManager.incrementMessageCount(userId);
   
   if (useOpenAI) {
-    console.log("🤖 Using OpenAI for intent parsing...");
     try {
       const aiResult = await parseWithOpenAI(msg, session);
       if (aiResult) {
@@ -51,8 +64,18 @@ async function parseIntent(msg, userId) {
         sessionManager.setContext(userId, 'lastAction', aiResult.action);
         
         // Convert OpenAI format to our internal format
+        const intentMapping = {
+          'CREATE_WALLET': 'create_wallet',
+          'CHECK_BALANCE': 'check_balance',
+          'LIST_WALLETS': 'list_wallets',
+          'HELP': 'help',
+          'EXPLAIN': 'explain',
+          'PORTFOLIO_ADVICE': 'portfolio_advice',
+          'MARKET_INFO': 'market_info'
+        };
+        
         return {
-          intent: aiResult.action.toLowerCase(),
+          intent: intentMapping[aiResult.action] || aiResult.action.toLowerCase(),
           address: aiResult.address,
           query: aiResult.explanation || msg,
           aiResponse: aiResult.response,
@@ -61,12 +84,11 @@ async function parseIntent(msg, userId) {
         };
       }
     } catch (error) {
-      console.error("OpenAI parsing failed, falling back:", error);
+      console.error("⚠️ OpenAI parsing failed, using simple parsing");
     }
   }
 
   // Fallback to simple parsing
-  console.log("📝 Using simple intent parsing...");
   const simpleResult = await parseIntentSimple(msg);
   simpleResult.userId = userId;
   return simpleResult;
@@ -90,24 +112,34 @@ async function handleIntent(intent, originalMessage = "") {
       const smartResponse = await generateSmartResponse("WALLET_CREATED");
       
       if (smartResponse) {
-        return `${smartResponse}\n\n📍 *Address:*\n\`${account.address.toString()}\`\n\n🔑 *Private Key:*\n\`${account.privateKey.toString()}\`\n\n⚠️ *Security Note:* Store your private key safely and never share it!\n\n💡 *Tip:* You now have ${session.wallets.length} wallet(s) saved. Type *"my wallets"* to see them all.`;
+        return `${smartResponse}\n\n📍 *Address:*\n${formatAddress(account.address.toString())}\n\n🔑 *Private Key:*\n${formatAddress(account.privateKey.toString())}\n\n⚠️ *Security Note:* Store your private key safely and never share it!\n\n💡 *Tip:* You now have ${session.wallets.length} wallet(s) saved. Type *"my wallets"* to see them all.`;
       }
       
       // Fallback response
-      return `✅ *Wallet Created Successfully!*\n\n📍 *Address:*\n\`${account.address.toString()}\`\n\n🔑 *Private Key:*\n\`${account.privateKey.toString()}\`\n\n⚠️ *Important:* Keep your private key safe and never share it with anyone!\n\n💡 You now have ${session.wallets.length} wallet(s) saved.`;
+      return `✅ *Wallet Created Successfully!*\n\n📍 *Address:*\n${formatAddress(account.address.toString())}\n\n🔑 *Private Key:*\n${formatAddress(account.privateKey.toString())}\n\n⚠️ *Important:* Keep your private key safe and never share it with anyone!\n\n💡 You now have ${session.wallets.length} wallet(s) saved.`;
     } 
     else if (intent.intent === "get_balance" || intent.intent === "check_balance") {
       if (!intent.address) {
         // If user has saved wallets, suggest them
         const userWallets = sessionManager.getUserWallets(userId);
         if (userWallets.length > 0) {
-          const walletList = userWallets.map((w, i) => `${i + 1}. ${w.nickname}: \`${w.address.substring(0, 10)}...\``).join('\n');
+          const walletList = userWallets.map((w, i) => `${i + 1}. ${w.nickname}: ${formatAddress(w.address.substring(0, 10) + '...')}`).join('\n');
           return `⚠️ Please provide a valid Massa address.\n\n*Your saved wallets:*\n${walletList}\n\nExample: *"Check balance for AU12abc..."* or just send the address.`;
         }
-        return "⚠️ Please provide a valid Massa address (starting with AU and 51 characters long).\n\nExample: Check balance for AU12abc...";
+        return "⚠️ Please provide a valid Massa address (starting with AU and 52 characters long).\n\nExample: Check balance for AU12abc...";
+      }
+      
+      // Validate address format before checking balance
+      if (!isValidMassaAddress(intent.address)) {
+        return `❌ *Invalid Address*\n\nThe address you provided is not valid.\n\n✅ *Valid format:* AU + 50 characters (52 total)\n📝 *Example:* AU12CzGuNMcj5eQbfCRNHLJffRFBqgJWGJKaiqvKKBfS9vhFCjGN2\n\n💡 Make sure you copied the complete address.`;
       }
       
       const balance = await getBalance(intent.address);
+      
+      // Handle error responses from getBalance
+      if (balance.includes("Unable to retrieve") || balance.includes("Invalid")) {
+        return `😔 *Balance Check Failed*\n\n${balance}\n\n💡 *Tips:*\n• Make sure the address is correct\n• Check your internet connection\n• Try again in a few seconds`;
+      }
       
       // Try to generate a smart response with OpenAI
       const smartResponse = await generateSmartResponse("BALANCE_RESULT", {
@@ -120,7 +152,7 @@ async function handleIntent(intent, originalMessage = "") {
       }
       
       // Fallback response
-      return `💰 *Balance Information*\n\n📍 *Address:*\n\`${intent.address}\`\n\n💎 *Balance:* ${balance} MAS`;
+      return `💰 *Balance Information*\n\n📍 *Address:*\n${formatAddress(intent.address)}\n\n💎 *Balance:* ${balance} MAS`;
     }
     else if (intent.intent === "list_wallets") {
       const userWallets = sessionManager.getUserWallets(userId);
@@ -130,9 +162,8 @@ async function handleIntent(intent, originalMessage = "") {
       }
       
       const walletList = userWallets.map((wallet, index) => {
-        const shortAddress = `${wallet.address.substring(0, 8)}...${wallet.address.substring(-8)}`;
         const timeAgo = Math.floor((Date.now() - wallet.createdAt) / (1000 * 60));
-        return `${index + 1}. *${wallet.nickname}*\n   📍 \`${shortAddress}\`\n   🕒 Created ${timeAgo}m ago`;
+        return `${index + 1}. ${formatWalletInfo(wallet.nickname, wallet.address, timeAgo)}`;
       }).join('\n\n');
       
       return `📝 *Your Wallets* (${userWallets.length})\n\n${walletList}\n\n💡 *Tip:* Send any address to check its balance!`;
@@ -201,6 +232,21 @@ async function handleIntent(intent, originalMessage = "") {
     // If we have an AI response from the parsing stage, use it
     if (intent.aiResponse) {
       return intent.aiResponse;
+    }
+
+    // Handle unknown intents - check if it might be an address
+    if (intent.intent === "unknown") {
+      // Check if the message looks like an address
+      if (isValidMassaAddress(originalMessage.trim())) {
+        // Recursively handle as balance check
+        return handleIntent({ 
+          intent: "check_balance", 
+          address: originalMessage.trim(), 
+          userId: userId 
+        }, originalMessage);
+      }
+      
+      return `❓ *I didn't understand that*\n\nTry one of these commands:\n• *"create wallet"* - Generate a new wallet\n• *"help"* - See all available commands\n• Send a Massa address to check its balance\n\n💡 Type *"help"* to see everything I can do!`;
     }
 
     return "❓ Sorry, I didn't understand your request. Type 'help' to see available commands.";

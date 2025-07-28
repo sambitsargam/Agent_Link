@@ -2,6 +2,18 @@
 
 This guide will walk you through setting up AgentLink step by step.
 
+## Features
+
+AgentLink provides the following WhatsApp commands:
+
+- **`create wallet`** - Generate a new Massa blockchain wallet
+- **`check balance for [address]`** - Check balance for any Massa address  
+- **`my wallets`** - Show your saved wallets (session-based)
+- **`portfolio advice`** - Get AI-powered investment tips (with OpenAI)
+- **`market info`** - Learn about Massa ecosystem and DeFi trends
+- **`help`** - Show available commands
+- **Educational queries** - Ask about DeFi, blockchain, etc.
+
 ## Prerequisites
 
 Before you begin, make sure you have:
@@ -43,11 +55,23 @@ npm install
 
 3. Edit `.env` file with your credentials:
    ```env
+   # Required: Twilio Configuration
    TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
    TWILIO_AUTH_TOKEN=your_auth_token_here
    TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
+   
+   # Optional: OpenAI for AI-powered responses
+   OPENAI_API_KEY=your_openai_api_key_here
+   USE_OPENAI=true
+   
+   # Server Configuration
    PORT=3000
    ```
+
+4. (Optional) Get OpenAI API key for AI-powered responses:
+   - Go to [OpenAI API Keys](https://platform.openai.com/api-keys)
+   - Create a new API key
+   - Add it to your `.env` file as `OPENAI_API_KEY`
 
 ## Step 3: Test the Application Locally
 
@@ -70,13 +94,6 @@ npm install
    }
    ```
 
-3. Test wallet creation (without WhatsApp):
-   ```bash
-   curl -X POST http://localhost:3000/whatsapp \
-     -H "Content-Type: application/x-www-form-urlencoded" \
-     -d "Body=create wallet&From=whatsapp:+1234567890"
-   ```
-
 ## Step 4: Set Up ngrok for Public Access
 
 1. Start ngrok in a new terminal:
@@ -92,7 +109,7 @@ npm install
 
 2. Set the webhook URL to:
    ```
-   https://your-ngrok-url.ngrok.io/whatsapp
+   https://your-ngrok-url.ngrok.io/webhook
    ```
 
 3. Save the configuration
@@ -143,18 +160,11 @@ npm install
 # Start the server
 npm start
 
-# Start with auto-reload (if you have nodemon)
-npm run dev
+# Check server status
+curl http://localhost:3000/
 
-# Test wallet creation
-curl -X POST http://localhost:3000/whatsapp \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "Body=create%20wallet&From=whatsapp:+1234567890"
-
-# Test balance check
-curl -X POST http://localhost:3000/whatsapp \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "Body=check%20balance%20for%20AU12CzGuNMcj5eQbfCRNHLJffRFBqgJWGJKaiqvKKBfS9vhFCjGN2&From=whatsapp:+1234567890"
+# View server logs
+tail -f logs/server.log  # if you set up logging
 ```
 
 ## Production Deployment

@@ -50,7 +50,6 @@ Format your response as JSON:
 
 async function parseWithOpenAI(message, userContext = {}) {
   if (!openai) {
-    console.log("OpenAI not configured, falling back to simple parsing");
     return null;
   }
 
@@ -82,10 +81,8 @@ async function parseWithOpenAI(message, userContext = {}) {
     
     try {
       const parsed = JSON.parse(responseText);
-      console.log("OpenAI parsed intent:", parsed);
       return parsed;
     } catch (parseError) {
-      console.log("OpenAI response was not valid JSON, treating as explanation:", responseText);
       return {
         action: "EXPLAIN",
         response: responseText,
