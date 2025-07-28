@@ -26,30 +26,34 @@ app.get("/health", (req, res) => {
 });
 
 // WhatsApp webhook endpoint
-app.post("/whatsapp", async (req, res) => {
-  try {
-    const msg = req.body.Body;
-    const from = req.body.From;
-
-    if (!msg || !from) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-
-    console.log(`📱 Received message from ${from}: ${msg}`);
-
-    // Parse user intent and handle the request
-    const intent = await parseIntent(msg);
-    const result = await handleIntent(intent, msg); // Pass original message
-
-    // Send response back to user
-    await sendMessageToWhatsApp(from, result);
+app.post('/webhook', (req, res) => {
+  console.log('Webhook received:', JSON.stringify(req.body, null, 2));
+  
+  const message = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+  
+  if (message) {
+    const from = message.from;
+    const text = message.text?.body;
     
-    console.log(`✅ Response sent to ${from}`);
-    res.sendStatus(200);
-  } catch (error) {
-    console.error("❌ Error processing WhatsApp message:", error);
-    res.status(500).json({ error: "Internal server error" });
+    if (text) {
+      console.log(`Message from ${from}: ${text}`);
+      
+      // Parse intent with userId and respond
+      parseIntent(text, from)
+        .then(intent => {
+          return handleIntent(intent, text);
+        })
+        .then(response => {
+          return sendMessage(from, response);
+        })
+        .catch(error => {
+          console.error('Error processing message:', error);
+          return sendMessage(from, "Sorry, something went wrong. Please try again.");
+        });
+    }
   }
+  
+  res.status(200).send('OK');
 });
 
 // Start the server
