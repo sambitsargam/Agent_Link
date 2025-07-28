@@ -39,7 +39,7 @@ app.post("/whatsapp", async (req, res) => {
 
     // Parse user intent and handle the request
     const intent = await parseIntent(msg);
-    const result = await handleIntent(intent);
+    const result = await handleIntent(intent, msg); // Pass original message
 
     // Send response back to user
     await sendMessageToWhatsApp(from, result);
