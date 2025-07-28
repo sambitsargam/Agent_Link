@@ -1,13 +1,17 @@
-const { ClientFactory, DefaultProviderUrls, WalletClient } = require("@massalabs/massa-web3");
+const { JsonRpcProvider } = require("@massalabs/massa-web3");
 
+// Connect to Massa buildnet (testnet)
 async function getBalance(address) {
-  const baseClient = await ClientFactory.createDefaultClient(
-    DefaultProviderUrls.TESTNET
-  );
-
-  const walletClient = new WalletClient(baseClient);
-  const balance = await walletClient.getWalletInfo(address);
-  return balance.final_balance;
+  try {
+    const provider = JsonRpcProvider.buildnet();
+    const balance = await provider.balanceOf([address]);
+    
+    // Return balance in MAS format
+    return balance[0]?.balance ? (balance[0].balance / BigInt(10**9)).toString() : "0";
+  } catch (error) {
+    console.error("Error getting balance:", error);
+    return "Error retrieving balance";
+  }
 }
 
 module.exports = { getBalance };
